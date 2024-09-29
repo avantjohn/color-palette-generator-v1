@@ -1,0 +1,24 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/globals.css';
+import ColorGenerator from '../components/ColorGenerator.astro';
+---
+
+<Layout title="Welcome to Astro.">
+	<main>
+			<ColorGenerator />
+	</main>
+</Layout>
+
+<style>
+	main {
+		margin: auto;
+		padding: 1rem;
+		min-height: 100vh;
+		width: 1280px;
+		max-width: calc(100% - 2rem);
+		color: white;
+		font-size: 20px;
+		line-height: 1.6;
+	}
+</style>

@@ -1,0 +1,215 @@
+---
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+
+
+---
+
+<div class="p-4 max-w-7xl mx-auto">
+  <Card>
+    <CardHeader>
+      <CardTitle>Color Palette Generator</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <form id="colorForm" class="flex gap-2 mb-4">
+        <div class="flex-grow flex items-center gap-2">
+          <input
+            type="color"
+            id="colorPicker"
+            class="w-10 h-10 border border-gray-300 rounded-lg flex-shrink-0 p-0 cursor-pointer"
+          />
+          <Input
+            type="text"
+            id="hexColor"
+            placeholder="Enter HEX color (e.g., #FF5733)"
+            className="flex-grow"
+          />
+        </div>
+        <Button type="submit">Generate Palette</Button>
+      </form>
+
+      <div id="paletteOutput" class="space-y-6">
+        <!-- Palettes will be inserted here -->
+      </div>
+    </CardContent>
+  </Card>
+</div>
+
+<div id="copyButtonContainer" class="hidden">
+  <Button id="copyButton" className="fixed bottom-4 right-4 z-10">Copy Palette to Clipboard</Button>
+</div>
+
+<script>
+    // Color conversion and palette generation functions
+const hexToRgb = (hex: string) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return [r, g, b];
+};
+
+const rgbToLab = (r: number, g: number, b: number) => {
+  let x, y, z;
+
+  r /= 255; g /= 255; b /= 255;
+
+  r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
+  g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
+  b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
+
+  x = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047;
+  y = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 1.00000;
+  z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
+
+  x = x > 0.008856 ? Math.pow(x, 1/3) : (7.787 * x) + 16/116;
+  y = y > 0.008856 ? Math.pow(y, 1/3) : (7.787 * y) + 16/116;
+  z = z > 0.008856 ? Math.pow(z, 1/3) : (7.787 * z) + 16/116;
+
+  return [(116 * y) - 16, 500 * (x - y), 200 * (y - z)];
+};
+
+const labToLch = (l: number, a: number, b: number) => {
+  const c = Math.sqrt(a * a + b * b);
+  let h = Math.atan2(b, a) * (180 / Math.PI);
+  if (h < 0) {
+    h += 360;
+  }
+  return [l, c, h];
+};
+
+const hexToOklch = (hex: string) => {
+  const [r, g, b] = hexToRgb(hex);
+  const [l, a, b_] = rgbToLab(r, g, b);
+  const [l_oklab, c, h] = labToLch(l, a, b_);
+  
+  // Convert L from Lab to Oklab (approximate conversion)
+  const l_ok = Math.cbrt(l_oklab / 100);
+  
+  return `oklch(${(l_ok * 100).toFixed(2)}% ${c.toFixed(2)}% ${h.toFixed(2)})`;
+};
+
+const generateShades = (baseOklch: string) => {
+  const match = baseOklch.match(/oklch\((\d+\.?\d*)% (\d+\.?\d*)% (\d+\.?\d*)\)/);
+  if (!match) {
+    throw new Error('Invalid OKLCH format');
+  }
+  
+  const [, l, c, h] = match.map(Number);
+
+  return [
+    { name: 50, oklch: `oklch(${Math.min(100, l * 1.8).toFixed(2)}% ${Math.max(0, c * 0.2).toFixed(2)}% ${h})` },
+    { name: 100, oklch: `oklch(${Math.min(100, l * 1.6).toFixed(2)}% ${Math.max(0, c * 0.4).toFixed(2)}% ${h})` },
+    { name: 200, oklch: `oklch(${Math.min(100, l * 1.4).toFixed(2)}% ${Math.max(0, c * 0.6).toFixed(2)}% ${h})` },
+    { name: 300, oklch: `oklch(${Math.min(100, l * 1.2).toFixed(2)}% ${Math.max(0, c * 0.8).toFixed(2)}% ${h})` },
+    { name: 400, oklch: `oklch(${Math.min(100, l * 1.1).toFixed(2)}% ${Math.max(0, c * 0.9).toFixed(2)}% ${h})` },
+    { name: 500, oklch: baseOklch },
+    { name: 600, oklch: `oklch(${Math.max(0, l * 0.85).toFixed(2)}% ${(c * 1.1).toFixed(2)}% ${h})` },
+    { name: 700, oklch: `oklch(${Math.max(0, l * 0.7).toFixed(2)}% ${(c * 1.2).toFixed(2)}% ${h})` },
+    { name: 800, oklch: `oklch(${Math.max(0, l * 0.55).toFixed(2)}% ${(c * 1.3).toFixed(2)}% ${h})` },
+    { name: 900, oklch: `oklch(${Math.max(0, l * 0.4).toFixed(2)}% ${(c * 1.4).toFixed(2)}% ${h})` },
+    { name: 950, oklch: `oklch(${Math.max(0, l * 0.25).toFixed(2)}% ${(c * 1.5).toFixed(2)}% ${h})` },
+  ];
+};
+
+  function generatePalette(hexColor: string) {
+    const baseOklch = hexToOklch(hexColor);
+    return generateShades(baseOklch);
+  }
+
+  let generatedPalettes: any[] = [];
+
+  function renderPalettes(palettes: any[]) {
+    generatedPalettes = palettes;
+    const output = document.getElementById('paletteOutput');
+    const copyButtonContainer = document.getElementById('copyButtonContainer');
+    if (output) {
+      output.innerHTML = palettes.map(palette => `
+        <div class="grid grid-cols-11 gap-4 w-full">
+          ${palette.map((shade: any) => `
+            <div class="flex flex-col items-center w-full">
+              <div
+                class="w-full aspect-square rounded-lg mb-1"
+                style="background-color: ${shade.oklch};"
+              ></div>
+              <div class="text-xs text-center w-full">
+                <div class="font-semibold">${shade.name}</div>
+                <div class="text-[10px] break-all">${shade.oklch}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+      
+      // Show the copy button container when palettes are generated
+      if (copyButtonContainer) {
+        copyButtonContainer.classList.remove('hidden');
+      }
+    }
+  }
+
+  function generateAdditionalPalettes(baseOklch: string, count: number = 17) {
+    const match = baseOklch.match(/oklch\((\d+\.?\d*)% (\d+\.?\d*)% (\d+\.?\d*)\)/);
+    if (!match) {
+      throw new Error('Invalid OKLCH format');
+    }
+    
+    const [, l, c, h] = match.map(Number);
+    const palettes = [generateShades(baseOklch)];
+
+    for (let i = 1; i < count; i++) {
+      const newHue = (h + (360 / count) * i) % 360;
+      const newOklch = `oklch(${l}% ${c}% ${newHue.toFixed(2)})`;
+      palettes.push(generateShades(newOklch));
+    }
+
+    return palettes;
+  }
+
+  document.getElementById('colorPicker')?.addEventListener('input', (e) => {
+    const input = e.target as HTMLInputElement;
+    const hexInput = document.getElementById('hexColor') as HTMLInputElement;
+    if (hexInput) {
+      hexInput.value = input.value;
+    }
+  });
+
+  document.getElementById('hexColor')?.addEventListener('input', (e) => {
+    const input = e.target as HTMLInputElement;
+    const colorPicker = document.getElementById('colorPicker') as HTMLInputElement;
+    if (colorPicker) {
+      colorPicker.value = input.value;
+    }
+  });
+
+  document.getElementById('colorForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const hexColor = (document.getElementById('hexColor') as HTMLInputElement)?.value ?? '';
+    const colorPicker = document.getElementById('colorPicker') as HTMLInputElement;
+    if (colorPicker) {
+      colorPicker.value = hexColor;
+    }
+    const baseOklch = hexToOklch(hexColor);
+    const palettes = generateAdditionalPalettes(baseOklch, 17);
+    renderPalettes(palettes);
+  });
+
+  document.getElementById('copyButton')?.addEventListener('click', () => {
+    if (generatedPalettes.length === 0) {
+      alert('Please generate a palette first.');
+      return;
+    }
+
+    const paletteText = generatedPalettes.map((palette, index) => {
+      return `Palette ${index + 1}:\n` + palette.map((shade: any) => `${shade.name}: ${shade.oklch}`).join('\n');
+    }).join('\n\n');
+
+    navigator.clipboard.writeText(paletteText).then(() => {
+      alert('Palette copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+      alert('Failed to copy palette. Please try again.');
+    });
+  });
+</script>
